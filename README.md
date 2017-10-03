@@ -94,7 +94,7 @@ private static void deployResourceAsProcess(String resourceName) {
 
 When acting as an _Employee_, we trigger a new process instantiation. We read from the CLI the needed information to trigger a request, and then asks the `RuntimeService` to create an instance of the `holidayRequest` process using these data.
 
-```
+```java
 private static void beAnEmployee() {
   // Reading employee name, numberOfHolidays and description from the command line
   
@@ -209,10 +209,60 @@ Completing a task (where `ID` is replaced by a valid task identifier):
 $ curl --user kermit:kermit -H "Content-Type: application/json" -X POST -d '{ "action" : "complete", "variables" : [ { "name" : "approved", "value" : true} ]  }' http://localhost:8080/flowable-rest/service/runtime/tasks/ID
 ```
 
-The task ends in error, as the custom class are not available in the server.
+__Problem__: The task ends in error, as the custom class are not available in the server! 
 
-## Specialising the docker image
+## Specialising the Docker Image
+
+We simply need to create a docker image that contains our custom class in the execution context of the process engine.
+
+Flowable is bundled as a WAR file, which need to be hosted in a _servlet_ container. We will use TomEE, the same container as the one used in the micro-services course (others are available, _e.g._, TomCat, Jetty). We extend the image published for TomEE+ 7.0.3, with JRE8. The root directory for TomEE is `/usr/local/tomee`
 
 
-We simply need to create a new docker image that contains our custom class in the execution context of the process engine.
-  
+```docker
+FROM tomee:8-jre-7.0.3-plus
+WORKDIR /usr/local/tomee/
+```
+
+We need to install the JDK in addition to the JRE, as we will use the `jar` command to tweak the Flowable app with our custom classes.
+
+```docker
+RUN apt-get update \
+      && apt-get --no-install-recommends install -y openjdk-8-jdk \
+      && rm -rf /var/lib/apt/lists/*
+```
+
+Then, at build time, we download the Flowable engine, unzip it, and deploy it as a web app in TomEE (_i.e._, copy it into the `webapp` directory).
+
+```docker
+RUN wget https://github.com/flowable/flowable-engine/releases/download/flowable-6.1.2/flowable-6.1.2.zip \
+      && unzip flowable-6.1.2.zip \
+      && cp ./flowable-6.1.2/wars/flowable-rest.war ./webapps/.
+```
+
+If no custom classes are required, the deployment can stop here. However, in our case, we need to add in the web app class path our custom classes to implement the service tasks. The easiest way to perform this task is to extract the contents of the `war` file, and add our custom classes as a `jar` file in the `WEB-INF/lib` directory.
+
+```
+RUN cd ./webapps \
+    && mkdir flowable-rest \
+    && cd flowable-rest \
+    && jar xf ../flowable-rest.war \
+    && cd .. \
+    && rm -rf ./flowable-rest.war \
+    && cd ..
+
+COPY ./target/flowable-demo-1.0-SNAPSHOT.jar ./webapps/flowable-rest/WEB-INF/lib/custom-classes.jar
+```
+
+### Building and Running the image
+
+To build the image (this can be quite long, as the flowable engine is quite large):
+
+```
+$ docker build -t petitroll/holidays .
+```
+
+To start a container using this image:
+
+```
+$ docker run -p8080:8080 petitroll/holidays
+```
