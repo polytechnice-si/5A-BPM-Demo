@@ -20,6 +20,7 @@
         <sequenceFlow sourceRef="approveTask" targetRef="decision"/>
 
         <exclusiveGateway id="decision"/>
+
         <sequenceFlow sourceRef="decision" targetRef="externalSystemCall">
             <conditionExpression xsi:type="tFormalExpression">
                 <![CDATA[ ${approved} ]]>
@@ -35,11 +36,7 @@
         <serviceTask id="externalSystemCall" name="Enter holidays in external system"
                      flowable:class="org.flowable.delegates.CallExternalSystemDelegate"/>
 
-        <sequenceFlow sourceRef="externalSystemCall" targetRef="holidayApprovedTask"/>
-
-        <userTask id="holidayApprovedTask" name="Holiday approved"/>
-
-        <sequenceFlow sourceRef="holidayApprovedTask" targetRef="approveEnd"/>
+        <sequenceFlow sourceRef="externalSystemCall" targetRef="approveEnd"/>
 
         <serviceTask id="sendRejectionMail" name="Send out rejection email"
                      flowable:class="org.flowable.delegates.SendRejectionMail"/>
